@@ -3,6 +3,9 @@
  * Read sensors values for prossesing and 
  * getting temperature data in degres celus.
  * 
+ * This version save data in file, change DATA_SAVE 
+ * to false for disable.
+ * 
  * Works with a PT100 and thermistor(MJSTS-103-3950-1-600-3D)
  * This software is devloped for Intel Edison board only
  * 
@@ -17,9 +20,32 @@ LiquidCrystal_I2C lcd(0x27, 20, 4); // Prepare 20*4 char lcd
 
 #define ANALOG_RESOLUTION_BITS 12
 #define MAX_VOLTAGE_VALUE 4095 // 1023 for 10 bits controllers and 4095 for 12bits controllers
+#define DATA_SAVE true
+
+FILE *dataOut;
+long timeData = 0;
+char fileName[26];
 
 void setup() {
   Serial.begin(9600);
+
+  randomSeed(analogRead(2));
+
+  // Data save init
+  
+  if(DATA_SAVE) {
+    String fileNameString = "temperature-data-";
+    fileNameString = fileNameString + random(10000);
+    fileNameString = fileNameString + ".csv";
+
+    fileNameString.toCharArray(fileName, 26);
+
+    dataOut = fopen(fileName, "w+");
+    fprintf(dataOut, "%s", "Time,Thermistor temperature (°C),Thermistor resistance (ohm),PT100 temperature (°C),PT100 resistance (ohm)\n");
+    fclose(dataOut); 
+  }
+
+  // Screen init
 
   lcd.begin();
   lcd.home();
@@ -46,28 +72,46 @@ void loop() {
 
   lcd.clear();
   lcd.home();
-  lcd.print("Thermistor: ");
+  lcd.print("Thermistor:  T=");
+  lcd.print(timeData);
   lcd.setCursor(0, 1);
   lcd.print(ohm / 1000.0);
   lcd.print(" kOhm, ");
   lcd.print(temperature);
   lcd.print(" C");
 
+  float thermistorOhm = ohm;
+  float thermistorTemperature = temperature;
+
   // PT100
-  // TODO: PT100 prossesing
   
   voltage = ((float) analogRead(A1)/(float) MAX_VOLTAGE_VALUE) * 5.0;
   ohm = voltage / ((5.0-voltage) / 10000.0);
-  temperature = -1;
+  if(ohm > 10000) { // Remove bad ohm value for remove screen overflow
+    ohm = 0;
+  }
+  temperature = (ohm/100 - 1)/0.003850;
 
   lcd.setCursor(0, 2);
   lcd.print("PT100: ");
   lcd.setCursor(0, 3);
-  lcd.print(ohm / 1000.0);
-  lcd.print(" kOhm, ");
+  lcd.print(ohm);
+  lcd.print(" Ohm, ");
   lcd.print(temperature);
   lcd.print(" C");
   
   delay(1000);
+
+  // Data saving
+  
+  if(DATA_SAVE) {
+    dataOut = fopen(fileName, "r+w");
+    
+    fseek(dataOut, 0, SEEK_END);
+    fprintf(dataOut, "%d,%f,%f,%f,%f\n", timeData, thermistorTemperature, thermistorOhm, temperature, ohm);
+    fclose(dataOut);
+  }
+  
+  timeData++;
 }
 
